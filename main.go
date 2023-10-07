@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	speech "cloud.google.com/go/speech/apiv2"
@@ -71,14 +72,34 @@ func main() {
 	})
 	check(err, "Initial Stream.send")
 
-	fmt.Println("ready")
+	file, err := os.Open("example.wav")
+	check(err, "Read example.wav")
+	defer file.Close()
+
+	buf := make([]byte, 1024)
 
 	for {
-		select {
-		case <-stream.Context().Done():
-			fmt.Println("Stream done")
-			return
+		n, err := file.Read(buf)
+		if err == io.EOF {
+			break
 		}
-	}
 
+		fmt.Printf("Send %d bytes\n", n)
+
+		err = stream.Send(&speechpb.StreamingRecognizeRequest{
+			StreamingRequest: &speechpb.StreamingRecognizeRequest_Audio{
+				Audio: buf[:n],
+			},
+		})
+		check(err, "Send chunk")
+
+	}
+	fmt.Println("OK")
+
+	for {
+		resp, err := stream.Recv()
+		check(err, "Speech receive")
+
+		fmt.Printf("Resp: %v\n", resp)
+	}
 }
